@@ -1,0 +1,8 @@
+movie/ratings/StreamingJob$1.class
+movie/ratings/BatchJob$1.class
+movie/ratings/BatchJob$SumRatingCount.class
+movie/ratings/MovieRating.class
+movie/ratings/BatchJob.class
+movie/ratings/StreamingJob.class
+movie/ratings/BatchJob$ExtractRating.class
+movie/ratings/StreamingJob$2.class
