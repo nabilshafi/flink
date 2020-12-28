@@ -1,5 +1,6 @@
 package movie.ratings;
 
+import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 
 import java.io.*;
@@ -11,6 +12,86 @@ import java.sql.Timestamp;
 
 
 public class Ysb {
+
+    public static class BidEvent implements Serializable {
+
+        public long timestamp;
+        public long auctionId;
+        public int personId;
+        public int bidId;
+        public double bid;
+
+        public BidEvent() {
+        }
+
+        public BidEvent(long timestamp, long auctionId, int personId, int bidId, double bid) {
+            this.timestamp = timestamp;
+            this.auctionId = auctionId;
+            this.personId = personId;
+            this.bidId = bidId;
+            this.bid = bid;
+        }
+
+        public Long getTimestamp() {
+            return timestamp;
+        }
+
+        public Long getAuctionId() {
+            return auctionId;
+        }
+
+        public Integer getPersonId() {
+            return personId;
+        }
+
+        public Integer getBidId() {
+            return bidId;
+        }
+
+        public Double getBid() {
+            return bid;
+        }
+    }
+
+    public static class AuctionEvent implements Serializable {
+
+        public long timestamp;
+        public long auctionId;
+        public long personId;
+        public long itemId;
+        public double initialPrice;
+        public double quantity;
+        public long start;
+        public long end;
+
+        public long getCategoryId() {
+            return categoryId;
+        }
+
+        public void setCategoryId(long categoryId) {
+            this.categoryId = categoryId;
+        }
+
+        public long categoryId;
+        public long ingestionTimestamp;
+
+
+        public AuctionEvent(long timestamp, long auctionId, long itemId, long personId, double initialPrice, long categoryID, double quantity, long start, long end) {
+
+            this.timestamp = timestamp;
+            this.auctionId = auctionId;
+            this.personId = personId;
+            this.itemId = itemId;
+            this.initialPrice = initialPrice;
+            this.categoryId = categoryID;
+            this.start = start;
+            this.end = end;
+            this.quantity = quantity;
+            this.ingestionTimestamp = ingestionTimestamp;
+        }
+
+    }
+
 
 
 
@@ -63,7 +144,7 @@ public class Ysb {
         }
     }
 
-    public static class YSBSource extends RichParallelSourceFunction<YSBRecord> {
+    public static class YSBSource extends RichParallelSourceFunction<BidEvent> {
 
         private static final String DELIMITER = "\n";
 
@@ -108,7 +189,7 @@ public class Ysb {
         }
 
         @Override
-        public void run(SourceContext<YSBRecord> ctx) throws Exception {
+        public void run(SourceContext<BidEvent> ctx) throws Exception {
             final StringBuilder buffer = new StringBuilder();
 
             try (Socket socket = new Socket()) {
@@ -120,7 +201,7 @@ public class Ysb {
                 PrintStream output = new PrintStream(socket.getOutputStream(), true);
 
                 // Necessary, so port stays open after disconnect
-                output.println( 0 + ":yahoo");
+                output.println( 0 + ":bids");
 
                 //output.print(getRuntimeContext().getIndexOfThisSubtask() + ":persons\n");
                 char[] cbuf = new char[8192];
@@ -151,8 +232,12 @@ public class Ysb {
                             }
 
                             String[] str = record.split(",");
-                            ctx.collect(new YSBRecord(str[0], str[1], str[2], str[3], str[4],new Timestamp(Long.valueOf(str[5])), str[6])); // filtering is possible also here but it d not be idiomatic
-
+                            //ctx.collect(new YSBRecord(str[0], str[1], str[2], str[3], str[4],new Timestamp(Long.valueOf(str[5])), str[6])); // filtering is possible also here but it d not be idiomatic
+                           /* ctx.collect(new AuctionEvent(Long.parseLong(str[0]), Long.parseLong(str[1]),Long.parseLong(str[2]),
+                                    Long.parseLong(str[3]), Double.parseDouble(str[4]),  Long.parseLong(str[5]), Double.parseDouble(str[6]),
+                                    Long.parseLong(str[7]),Long.parseLong(str[8])));*/
+                            ctx.collect(new BidEvent(Long.parseLong(str[0]), Long.parseLong(str[1]),Integer.parseInt(str[2]),
+                                    Integer.parseInt(str[3]), Double.parseDouble(str[4])));
                         }
 
                         buffer.delete(0, delimPos + DELIMITER.length());

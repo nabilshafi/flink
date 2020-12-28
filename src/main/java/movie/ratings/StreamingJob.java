@@ -24,11 +24,29 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.operators.DataSource;
+import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
+import org.apache.flink.streaming.api.functions.ProcessFunction;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.types.IntValue;
 import org.apache.flink.util.Collector;
+
+
+
+
+import org.apache.flink.streaming.api.TimeCharacteristic;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 
 import java.io.*;
 import java.net.Socket;
@@ -60,9 +78,64 @@ public class StreamingJob {
 
 
 
-		DataStream<Ysb.YSBRecord> file = env.addSource(new Ysb.YSBSource());
+		DataStream<Ysb.BidEvent> file = env.addSource(new Ysb.YSBSource());
 
-		DataStream<Ysb.YSBRecord> filtered = file.filter(value -> value.eventType.equals("view"));
+		DataStream<String> concat = file.map(new MapFunction<Ysb.BidEvent, String>() {
+
+			@Override
+			public String map(Ysb.BidEvent line) throws Exception {
+				return line.getAuctionId() + " bidId: " + line.getBidId() + " personId: " + line.getPersonId() ;
+			}
+
+		});
+
+		//concat.print();
+
+
+
+		DataStream<Tuple2<Long, Long>>  count = file.
+				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId())
+				.timeWindow(Time.milliseconds(40), Time.milliseconds(20)).
+				process(new AddBids());
+
+
+		count.print();
+
+
+/*		count = count.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(100)))
+				.maxBy(0);
+
+
+
+
+		count.print();*/
+
+
+	/*	DataStream<Long> concat = file.map(new MapFunction<Ysb.AuctionEvent, Long>() {
+
+			@Override
+			public Long map(Ysb.AuctionEvent line) throws Exception {
+				return line.getCategoryId();
+			}
+
+		});
+
+		concat.print();
+*/
+/*
+
+		DataStream<Tuple2<Long, Long>>  count = file.
+				keyBy((Ysb.AuctionEvent ev) -> ev.categoryId).window(TumblingProcessingTimeWindows.of(Time.milliseconds(100))).
+				process(new AddTips());
+*/
+
+
+
+		//.window(Time.minutes(1))
+
+		//count.print();
+
+		/*DataStream<Ysb.YSBRecord> filtered = file.filter(value -> value.eventType.equals("view"));
 
 		DataStream<String> concat = filtered.map(new MapFunction<Ysb.YSBRecord, String>() {
 
@@ -71,9 +144,10 @@ public class StreamingJob {
 				return line.getEventType();
 			}
 
-		});
+		});*/
+//concat.print();
 
-		concat.print();
+		//concat.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/java/movie/ratings/calculateYsbRatings.csv").setParallelism(1);
 
 
 
@@ -117,5 +191,35 @@ public class StreamingJob {
 		//System.out.println("Throughput: " + (System.nanoTime() - startTime));
 
 	}
+
+	public static class AddTips extends ProcessWindowFunction<
+			Ysb.AuctionEvent, Tuple2<Long,Long>, Long, TimeWindow> {
+
+
+		@Override
+		public void process(Long key, Context context, Iterable<Ysb.AuctionEvent> fares, Collector<Tuple2<Long, Long>> out) throws Exception {
+			long sumOfTips = 0;
+			for (Ysb.AuctionEvent f : fares) {
+				sumOfTips ++;
+			}
+			out.collect(Tuple2.of( sumOfTips,key));
+		}
+	}
+
+
+	public static class AddBids extends ProcessWindowFunction<
+			Ysb.BidEvent, Tuple2<Long,Long>, Long, TimeWindow> {
+
+
+		@Override
+		public void process(Long key, Context context, Iterable<Ysb.BidEvent> bids, Collector<Tuple2<Long, Long>> out) throws Exception {
+			long sumOfBids = 0;
+			for (Ysb.BidEvent f : bids) {
+				sumOfBids ++;
+			}
+			out.collect(Tuple2.of( sumOfBids,key));
+		}
+	}
+
 
 }
