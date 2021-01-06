@@ -71,6 +71,7 @@ public class StreamingJob {
 	private static final String DELIMITER = "\n";
 
 
+
 	public static void main(String[] args) throws Exception {
 		// set up the streaming execution environment
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -80,27 +81,39 @@ public class StreamingJob {
 
 		DataStream<Ysb.BidEvent> file = env.addSource(new Ysb.YSBSource());
 
-		DataStream<String> concat = file.map(new MapFunction<Ysb.BidEvent, String>() {
+
+		/*DataStream<Tuple2<Long, Long>>  count = file.
+				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId())
+				.timeWindow(Time.milliseconds(40), Time.milliseconds(20)).
+						process(new AddBids());
+		count.windowAll(TumblingEventTimeWindows.of(Time.hours(1)))
+				.maxBy(0);
+
+		count.print();
+
+
+		DataStream<Tuple2<Long, Double>>  county = file.
+				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId())
+				.timeWindow(Time.milliseconds(40)).
+						process(new HighestBids());
+
+		county.windowAll(TumblingEventTimeWindows.of(Time.hours(1)))
+				.maxBy(1);*/
+
+		DataStream<Tuple2<Long, Double>> conversion = file.map(new MapFunction<Ysb.BidEvent, Tuple2<Long, Double>>() {
 
 			@Override
-			public String map(Ysb.BidEvent line) throws Exception {
-				return line.getAuctionId() + " bidId: " + line.getBidId() + " personId: " + line.getPersonId() ;
+			public Tuple2<Long, Double> map(Ysb.BidEvent line) throws Exception {
+
+				Double price = line.getBidPrice()*1.24;
+				long key  = line.getBidId();
+
+				return new Tuple2(key,price);
 			}
 
 		});
 
-		//concat.print();
-
-
-
-		DataStream<Tuple2<Long, Long>>  count = file.
-				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId())
-				.timeWindow(Time.milliseconds(40), Time.milliseconds(20)).
-				process(new AddBids());
-
-
-		count.print();
-
+		conversion.print();
 
 /*		count = count.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(100)))
 				.maxBy(0);
@@ -192,24 +205,10 @@ public class StreamingJob {
 
 	}
 
-	public static class AddTips extends ProcessWindowFunction<
-			Ysb.AuctionEvent, Tuple2<Long,Long>, Long, TimeWindow> {
-
-
-		@Override
-		public void process(Long key, Context context, Iterable<Ysb.AuctionEvent> fares, Collector<Tuple2<Long, Long>> out) throws Exception {
-			long sumOfTips = 0;
-			for (Ysb.AuctionEvent f : fares) {
-				sumOfTips ++;
-			}
-			out.collect(Tuple2.of( sumOfTips,key));
-		}
-	}
 
 
 	public static class AddBids extends ProcessWindowFunction<
 			Ysb.BidEvent, Tuple2<Long,Long>, Long, TimeWindow> {
-
 
 		@Override
 		public void process(Long key, Context context, Iterable<Ysb.BidEvent> bids, Collector<Tuple2<Long, Long>> out) throws Exception {
@@ -218,6 +217,22 @@ public class StreamingJob {
 				sumOfBids ++;
 			}
 			out.collect(Tuple2.of( sumOfBids,key));
+		}
+	}
+
+	public static class HighestBids extends ProcessWindowFunction<
+			Ysb.BidEvent, Tuple2<Long,Double>, Long, TimeWindow> {
+
+		@Override
+		public void process(Long key, Context context, Iterable<Ysb.BidEvent> bids, Collector<Tuple2<Long, Double>> out) throws Exception {
+			double bidPrice = 0;
+			for (Ysb.BidEvent f : bids) {
+				if(f.getBidPrice() > bidPrice){
+					bidPrice = f.getBidPrice();
+				}
+
+			}
+			out.collect(Tuple2.of( key,bidPrice));
 		}
 	}
 

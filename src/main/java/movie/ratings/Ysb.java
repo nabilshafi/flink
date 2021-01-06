@@ -19,17 +19,17 @@ public class Ysb {
         public long auctionId;
         public int personId;
         public int bidId;
-        public double bid;
+        public double bidPrice;
 
         public BidEvent() {
         }
 
-        public BidEvent(long timestamp, long auctionId, int personId, int bidId, double bid) {
+        public BidEvent(long timestamp, long auctionId, int personId, int bidId, double bidPrice) {
             this.timestamp = timestamp;
             this.auctionId = auctionId;
             this.personId = personId;
             this.bidId = bidId;
-            this.bid = bid;
+            this.bidPrice = bidPrice;
         }
 
         public Long getTimestamp() {
@@ -48,8 +48,8 @@ public class Ysb {
             return bidId;
         }
 
-        public Double getBid() {
-            return bid;
+        public Double getBidPrice() {
+            return bidPrice;
         }
     }
 
