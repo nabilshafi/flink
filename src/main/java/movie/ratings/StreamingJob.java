@@ -18,41 +18,19 @@
 
 package movie.ratings;
 
-import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.operators.DataSource;
-import org.apache.flink.api.java.tuple.Tuple1;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.java.tuple.*;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
-import org.apache.flink.streaming.api.functions.ProcessFunction;
+import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-import org.apache.flink.types.IntValue;
-import org.apache.flink.util.Collector;
-
-
-
-
-import org.apache.flink.streaming.api.TimeCharacteristic;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-
-import java.io.*;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.stream.Stream;
-
+import org.apache.flink.util.Collector;
+import movie.ratings.BidEventTimestampExtractor;
 /**
  * Skeleton for a Flink Streaming Job.
  *
@@ -77,162 +55,160 @@ public class StreamingJob {
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		  boolean isRunning = true;
 
+		long startTime = System.currentTimeMillis();
 
-
-		DataStream<Ysb.BidEvent> file = env.addSource(new Ysb.YSBSource());
-
-
-		/*DataStream<Tuple2<Long, Long>>  count = file.
-				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId())
-				.timeWindow(Time.milliseconds(40), Time.milliseconds(20)).
-						process(new AddBids());
-		count.windowAll(TumblingEventTimeWindows.of(Time.hours(1)))
-				.maxBy(0);
-
-		count.print();
-
-
-		DataStream<Tuple2<Long, Double>>  county = file.
-				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId())
-				.timeWindow(Time.milliseconds(40)).
-						process(new HighestBids());
-
-		county.windowAll(TumblingEventTimeWindows.of(Time.hours(1)))
-				.maxBy(1);*/
-
-		DataStream<Tuple2<Long, Double>> conversion = file.map(new MapFunction<Ysb.BidEvent, Tuple2<Long, Double>>() {
+		DataStream<Ysb.BidEvent> file = env.addSource(new Ysb.YSBSource()).setParallelism(1);
+		//DataStream<String> text = env.readTextFile("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/java/movie/ratings/ratings100k.csv").setParallelism(1);
+		/*DataStream<Ysb.MovieRating> file = text
+				.map((line) -> {
+					line += "," + System.currentTimeMillis();
+					String[] str = line.split(",");
+					Ysb.MovieRating event = new Ysb.MovieRating(Long.parseLong(str[3]), Long.parseLong(str[0]),Long.parseLong(str[1]),
+							 Double.parseDouble(str[2]), Long.parseLong(str[4]));
+					return event;
+				});
+*/
+		/*DataStream<Tuple4<Long, Long, Double, Long>> concat = text.map(new MapFunction<String, Tuple4<Long, Long, Double, Long>>() {
 
 			@Override
-			public Tuple2<Long, Double> map(Ysb.BidEvent line) throws Exception {
+			public Tuple4<Long, Long, Double, Long> map(String s) throws Exception {
+				String[] str = s.split(",");
+				return Tuple4.of(Long.parseLong(str[0]),Long.parseLong(str[1]),Double.parseDouble(str[2]),Long.parseLong(str[4]));
+			}
+
+
+		}).setParallelism(1);*/
+
+
+
+		//DataStream<Tuple4<Long, Long, Double, Long>> concat3 =  concat.keyBy(0).timeWindow(Time.milliseconds(200),Time.milliseconds(100)).max(3).setParallelism(1);
+
+
+//MaxBid
+
+
+
+
+		DataStream<Tuple6<Long,Long, Integer,Long, Long,Long>>  county = file.assignTimestampsAndWatermarks(new BidEventTimestampExtractor()).
+				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId()).timeWindow(Time.milliseconds(3000),Time.milliseconds(1000))
+				.process(new HotBids()).setParallelism(1);
+
+		DataStream<Tuple6<Long ,Long, Integer,Long, Long,Long>>  ty = county.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(1000))).maxBy(3);
+
+
+		//DataStream<Tuple6<Long ,Long, Integer,Long, Long,Long>>  ty = county.keyBy(t->t.f0).maxBy(3);
+	//	ty.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/ty.csv").setParallelism(1);
+
+
+		DataStream<Tuple7<Long ,Long, Integer,Long, Long,Long,Long>> hotbid = ty.map(new MapFunction<Tuple6<Long ,Long, Integer,Long, Long,Long>,Tuple7<Long ,Long, Integer,Long, Long,Long, Long>>() {
+
+			@Override
+			public Tuple7<Long ,Long, Integer,Long, Long,Long,Long>map(Tuple6<Long ,Long, Integer,Long, Long,Long> t) throws Exception {
+
+				return Tuple7.of(t.f0,t.f1,t.f2,t.f3,t.f4,t.f5,System.currentTimeMillis());
+			}
+
+
+		});
+
+		hotbid.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/hotbid.csv").setParallelism(1);
+
+
+
+
+//HighestBid
+	/*	DataStream<Tuple4<Long, Double, Long, Long>>  county = file.
+				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId()).window(TumblingProcessingTimeWindows.of(Time.milliseconds(1000))).
+						process(new HighestBids()).setParallelism(1);
+
+		DataStream<Tuple4<Long, Double, Long, Long>>  hourlyMax = county.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(1000))).
+				maxBy(1);
+
+		DataStream<Tuple5<Long, Double, Long, Long, Long>> Double = hourlyMax.map(new MapFunction<Tuple4<Long, Double, Long, Long>,Tuple5<Long, Double, Long, Long, Long>>() {
+
+			@Override
+			public Tuple5<Long, Double, Long, Long, Long> map(Tuple4<Long, Double, Long,Long> t) throws Exception {
+
+				return Tuple5.of(t.f0,t.f1,t.f2,t.f3,System.currentTimeMillis());
+			}
+
+
+		});
+
+		Double.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/highestbid.csv").setParallelism(1);*/
+
+
+//Currency Conversion
+
+	/*	DataStream<Tuple5<Long, Double,Long,Long,Long>> conversion = file.map(new MapFunction<Ysb.BidEvent, Tuple5<Long, Double,Long,Long,Long>>() {
+
+			@Override
+			public Tuple5<Long, Double,Long,Long,Long> map(Ysb.BidEvent line) throws Exception {
 
 				Double price = line.getBidPrice()*1.24;
 				long key  = line.getBidId();
 
-				return new Tuple2(key,price);
+				return new Tuple5(key,price,line.geteventTime(),line.getprocessingTime(),System.currentTimeMillis());
 			}
 
 		});
 
-		conversion.print();
 
-/*		count = count.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(100)))
-				.maxBy(0);
+		conversion.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/ccurrencyconversion.csv").setParallelism(1);*/
 
 
 
 
-		count.print();*/
 
-
-	/*	DataStream<Long> concat = file.map(new MapFunction<Ysb.AuctionEvent, Long>() {
-
-			@Override
-			public Long map(Ysb.AuctionEvent line) throws Exception {
-				return line.getCategoryId();
-			}
-
-		});
-
-		concat.print();
-*/
-/*
-
-		DataStream<Tuple2<Long, Long>>  count = file.
-				keyBy((Ysb.AuctionEvent ev) -> ev.categoryId).window(TumblingProcessingTimeWindows.of(Time.milliseconds(100))).
-				process(new AddTips());
-*/
-
-
-
-		//.window(Time.minutes(1))
-
-		//count.print();
-
-		/*DataStream<Ysb.YSBRecord> filtered = file.filter(value -> value.eventType.equals("view"));
-
-		DataStream<String> concat = filtered.map(new MapFunction<Ysb.YSBRecord, String>() {
-
-			@Override
-			public String map(Ysb.YSBRecord line) throws Exception {
-				return line.getEventType();
-			}
-
-		});*/
-//concat.print();
 
 		//concat.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/java/movie/ratings/calculateYsbRatings.csv").setParallelism(1);
 
 
 
-	/*	Socket echoSocket = new Socket("localhost", 31000);
-		PrintWriter out =
-				new PrintWriter(echoSocket.getOutputStream(), true);
-		BufferedReader input  = new BufferedReader(
-				new InputStreamReader(echoSocket.getInputStream(), StandardCharsets.UTF_8));
 
-		String line;
-		StringBuilder sb = new StringBuilder();
-		out.println( 0 + ":persons");
-		line = input.readLine();
-		while ((line = input.readLine()) != null) {
-			System.out.println(line);
-		}
-*/
-
-
-/*		DataStream<String> concat = file.map(new MapFunction<String, String>() {
-			@Override
-			public String map(String line) {
-				return line.concat("," + System.nanoTime());
-			}
-		});
-
-
-		DataStream<MovieRating> cal = concat.map(new MapFunction<String, MovieRating>() {
-			@Override
-			public MovieRating map(String line) {
-				String [] splitLine = line.split(",");
-				MovieRating movieRating = new MovieRating(splitLine[0], splitLine[1] ,splitLine[2] ,splitLine[3],splitLine[4], System.nanoTime()+"");
-				//return line.replaceAll(splitLine[4], System.nanoTime() - Long.parseLong(splitLine[4]) + "");
-				return movieRating;
-			}
-		});
-		cal.print();*/
-		/*cal.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/java/movie/ratings/calculateRatings1m.csv").setParallelism(1);
-		System.out.println("Throughput: " + (System.nanoTime() - startTime));*/
 		env.execute("Flink Streaming Java API Skeleton");
-		//System.out.println("Throughput: " + (System.nanoTime() - startTime));
+
+		System.out.println("Throughput: " + (System.currentTimeMillis() - startTime));
 
 	}
 
 
 
-	public static class AddBids extends ProcessWindowFunction<
-			Ysb.BidEvent, Tuple2<Long,Long>, Long, TimeWindow> {
+	public static class HotBids extends ProcessWindowFunction<
+			Ysb.BidEvent, Tuple6<Long,Long, Integer, Long, Long, Long>, Long, TimeWindow> {
 
 		@Override
-		public void process(Long key, Context context, Iterable<Ysb.BidEvent> bids, Collector<Tuple2<Long, Long>> out) throws Exception {
+		public void process(Long key, Context context, Iterable<Ysb.BidEvent> bids, Collector<Tuple6<Long,Long, Integer, Long, Long,Long>> out) throws Exception {
 			long sumOfBids = 0;
+			long eventTime = 0, processingTime = 0;
+			int bidId = 0;
 			for (Ysb.BidEvent f : bids) {
+				bidId = f.getBidId();
 				sumOfBids ++;
+				eventTime = f.geteventTime();
+				processingTime = f.getprocessingTime();
 			}
-			out.collect(Tuple2.of( sumOfBids,key));
+
+			out.collect(Tuple6.of(context.window().getEnd(),key,bidId, sumOfBids, eventTime, processingTime));
 		}
 	}
 
 	public static class HighestBids extends ProcessWindowFunction<
-			Ysb.BidEvent, Tuple2<Long,Double>, Long, TimeWindow> {
+			Ysb.BidEvent, Tuple4<Long, Double, Long, Long>, Long, TimeWindow> {
 
 		@Override
-		public void process(Long key, Context context, Iterable<Ysb.BidEvent> bids, Collector<Tuple2<Long, Double>> out) throws Exception {
+		public void process(Long key, Context context, Iterable<Ysb.BidEvent> bids, Collector<Tuple4<Long, Double, Long, Long>> out) throws Exception {
 			double bidPrice = 0;
+			long eventTime = 0, processingTime = 0;
 			for (Ysb.BidEvent f : bids) {
 				if(f.getBidPrice() > bidPrice){
 					bidPrice = f.getBidPrice();
+					eventTime = f.geteventTime();
+					processingTime = f.getprocessingTime();
 				}
 
 			}
-			out.collect(Tuple2.of( key,bidPrice));
+			out.collect(Tuple4.of(key,bidPrice, eventTime, processingTime));
 		}
 	}
 

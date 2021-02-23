@@ -15,25 +15,30 @@ public class Ysb {
 
     public static class BidEvent implements Serializable {
 
-        public long timestamp;
+        public long eventTime;
         public long auctionId;
         public int personId;
         public int bidId;
         public double bidPrice;
+        public long processingTime;
 
         public BidEvent() {
         }
 
-        public BidEvent(long timestamp, long auctionId, int personId, int bidId, double bidPrice) {
-            this.timestamp = timestamp;
+        public BidEvent(long auctionId, long eventTime, int personId, int bidId, double bidPrice, long processingTime) {
+            this.eventTime = eventTime;
             this.auctionId = auctionId;
             this.personId = personId;
             this.bidId = bidId;
             this.bidPrice = bidPrice;
+            this.processingTime = processingTime;
         }
 
-        public Long getTimestamp() {
-            return timestamp;
+        public Long geteventTime() {
+            return eventTime;
+        }
+        public Long getprocessingTime() {
+            return processingTime;
         }
 
         public Long getAuctionId() {
@@ -51,6 +56,51 @@ public class Ysb {
         public Double getBidPrice() {
             return bidPrice;
         }
+    }
+
+
+
+    public static class MovieRating implements Serializable {
+
+
+        public long userId;
+        public long movieId;
+        public long eventTime;
+        public double rating;
+        public long processingTime;
+
+        public long getUserId() {
+            return userId;
+        }
+
+        public long getMovieId() {
+            return movieId;
+        }
+
+        public long getEventTime() {
+            return eventTime;
+        }
+
+        public double getRating() {
+            return rating;
+        }
+
+        public long getProcessingTime() {
+            return processingTime;
+        }
+
+        public MovieRating() {
+        }
+
+        public MovieRating(long eventTime, long userId, long movieId, double rating, long processingTime) {
+            this.eventTime = eventTime;
+            this.userId = userId;
+            this.movieId = movieId;
+            this.rating = rating;
+            this.processingTime = processingTime;
+        }
+
+
     }
 
     public static class AuctionEvent implements Serializable {
@@ -153,7 +203,7 @@ public class Ysb {
         private volatile boolean isRunning = true;
 
         private String hostname = "localhost";
-        private int port = 31000;
+        private int port = 5000;
 
         private static final int CONNECTION_TIMEOUT_TIME = 0;
 
@@ -164,9 +214,11 @@ public class Ysb {
 
         private transient FileChannel channel;
 
+        private BufferedReader reader,in;
+        private PrintWriter output;
 
 
-        public YSBSource() {
+        public YSBSource() throws IOException {
 
         }
 
@@ -185,69 +237,54 @@ public class Ysb {
 
         @Override
         public void close() throws Exception {
-            channel.close();
+            currentSocket.close();
+
+            //channel.close();
         }
 
         @Override
         public void run(SourceContext<BidEvent> ctx) throws Exception {
             final StringBuilder buffer = new StringBuilder();
 
-            try (Socket socket = new Socket()) {
-                currentSocket = socket;
+            //172.16.0.254
+            currentSocket =  new Socket("172.16.0.254", 5000);
 
-                socket.connect(new InetSocketAddress(hostname, port), CONNECTION_TIMEOUT_TIME);
 
-                BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintStream output = new PrintStream(socket.getOutputStream(), true);
+               // socket.connect(new InetSocketAddress(hostname, port), CONNECTION_TIMEOUT_TIME);
+
+
+        in =  new BufferedReader(
+                new InputStreamReader(currentSocket.getInputStream()));
+        output =  new PrintWriter(currentSocket.getOutputStream(), true);
 
                 // Necessary, so port stays open after disconnect
                 output.println( 0 + ":bids");
 
                 //output.print(getRuntimeContext().getIndexOfThisSubtask() + ":persons\n");
-                char[] cbuf = new char[8192];
-                int bytesRead;
-                while (isRunning) {
 
-                    try {
-                        if ((bytesRead = reader.read(cbuf)) == -1) {
-                            break;
-                        }
-                    } catch (IOException exception) {
-                        break;
+                String line = null;
+                try {
+                    int i = 0;
+                    while ((line = in.readLine()) != null) {
+
+                        line += "," + System.currentTimeMillis();
+                        String[] str = line.split(",");
+                        ctx.collect(new BidEvent(Long.parseLong(str[0]), Long.parseLong(str[1]),Integer.parseInt(str[2]),
+                                Integer.parseInt(str[3]), Double.parseDouble(str[4]), Long.parseLong(str[5])));
                     }
-
-                    buffer.append(cbuf, 0, bytesRead);
-                    int delimPos;
-                    while (buffer.length() >= DELIMITER.length() && (delimPos = buffer.indexOf(DELIMITER)) != -1) {
-                        String record = buffer.substring(0, delimPos);
-                        // truncate trailing carriage return
-                        if (record.endsWith("\r")) {
-                            record = record.substring(0, record.length() - 1);
-                        }
-
-                        synchronized (ctx.getCheckpointLock()) {
-
-                            if (!isRunning) {
-                                return;
-                            }
-
-                            String[] str = record.split(",");
-                            //ctx.collect(new YSBRecord(str[0], str[1], str[2], str[3], str[4],new Timestamp(Long.valueOf(str[5])), str[6])); // filtering is possible also here but it d not be idiomatic
-                           /* ctx.collect(new AuctionEvent(Long.parseLong(str[0]), Long.parseLong(str[1]),Long.parseLong(str[2]),
-                                    Long.parseLong(str[3]), Double.parseDouble(str[4]),  Long.parseLong(str[5]), Double.parseDouble(str[6]),
-                                    Long.parseLong(str[7]),Long.parseLong(str[8])));*/
-                            ctx.collect(new BidEvent(Long.parseLong(str[0]), Long.parseLong(str[1]),Integer.parseInt(str[2]),
-                                    Integer.parseInt(str[3]), Double.parseDouble(str[4])));
-                        }
-
-                        buffer.delete(0, delimPos + DELIMITER.length());
-                    }
+                    return;
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-            }
+
+
+
         }
 
         @Override
         public void cancel() {
+
+
             running = false;
         }
     }
