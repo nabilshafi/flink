@@ -222,18 +222,6 @@ public class Ysb {
 
         }
 
-/*
-        @Override
-        public void open(Configuration parameters) throws Exception {
-            super.open(parameters);
-
-            int idx = getRuntimeContext().getIndexOfThisSubtask();
-
-            channel = FileChannel.open(new File(path + "/ysb" + idx + ".bin").toPath(), StandardOpenOption.READ);
-            mbuff = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
-        }
-*/
-
 
         @Override
         public void close() throws Exception {
@@ -247,7 +235,7 @@ public class Ysb {
             final StringBuilder buffer = new StringBuilder();
 
             //172.16.0.254
-            currentSocket =  new Socket("172.16.0.254", 5000);
+            currentSocket =  new Socket("192.168.1.10", 5000);
 
 
                // socket.connect(new InetSocketAddress(hostname, port), CONNECTION_TIMEOUT_TIME);
@@ -267,15 +255,99 @@ public class Ysb {
                     int i = 0;
                     while ((line = in.readLine()) != null) {
 
-                        line += "," + System.currentTimeMillis();
+                       // line += "," + System.currentTimeMillis();
                         String[] str = line.split(",");
                         ctx.collect(new BidEvent(Long.parseLong(str[0]), Long.parseLong(str[1]),Integer.parseInt(str[2]),
-                                Integer.parseInt(str[3]), Double.parseDouble(str[4]), Long.parseLong(str[5])));
+                                Integer.parseInt(str[3]), Double.parseDouble(str[4]), System.currentTimeMillis() ));
                     }
                     return;
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+
+
+
+        }
+
+        @Override
+        public void cancel() {
+
+
+            running = false;
+        }
+    }
+
+
+    public static class SocketSource extends RichParallelSourceFunction<BidEvent> {
+
+        private static final String DELIMITER = "\n";
+
+        private transient Socket currentSocket;
+
+        private volatile boolean isRunning = true;
+
+        private String hostname = "localhost";
+        private int port = 5000;
+
+        private static final int CONNECTION_TIMEOUT_TIME = 0;
+
+        private volatile boolean running = true;
+
+
+        private transient MappedByteBuffer mbuff;
+
+        private transient FileChannel channel;
+
+        private BufferedReader reader,in;
+        private PrintWriter output;
+
+
+        public SocketSource() throws IOException {
+
+        }
+
+
+        @Override
+        public void close() throws Exception {
+            currentSocket.close();
+
+            //channel.close();
+        }
+
+        @Override
+        public void run(SourceContext<BidEvent> ctx) throws Exception {
+            final StringBuilder buffer = new StringBuilder();
+
+            //172.16.0.254
+            currentSocket =  new Socket("192.168.0.10", 5000);
+
+
+            // socket.connect(new InetSocketAddress(hostname, port), CONNECTION_TIMEOUT_TIME);
+
+
+            in =  new BufferedReader(
+                    new InputStreamReader(currentSocket.getInputStream()));
+            output =  new PrintWriter(currentSocket.getOutputStream(), true);
+
+            // Necessary, so port stays open after disconnect
+            output.println( 0 + ":bids");
+
+            //output.print(getRuntimeContext().getIndexOfThisSubtask() + ":persons\n");
+
+            String line = null;
+            try {
+                int i = 0;
+                while ((line = in.readLine()) != null) {
+
+                    line += "," + System.currentTimeMillis();
+                    String[] str = line.split(",");
+                    ctx.collect(new BidEvent(Long.parseLong(str[0]), Long.parseLong(str[1]),Integer.parseInt(str[2]),
+                            Integer.parseInt(str[3]), Double.parseDouble(str[4]), Long.parseLong(str[5])));
+                }
+                return;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
 
 

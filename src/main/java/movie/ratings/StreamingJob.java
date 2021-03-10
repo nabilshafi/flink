@@ -57,7 +57,9 @@ public class StreamingJob {
 
 		long startTime = System.currentTimeMillis();
 
-		DataStream<Ysb.BidEvent> file = env.addSource(new Ysb.YSBSource()).setParallelism(1);
+		DataStream<Ysb.BidEvent> source1 = env.addSource(new Ysb.YSBSource()).setParallelism(1);
+		DataStream<Ysb.BidEvent> source2 = env.addSource(new Ysb.SocketSource()).setParallelism(1);
+		DataStream<Ysb.BidEvent> file =source1.union(source2);
 		//DataStream<String> text = env.readTextFile("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/java/movie/ratings/ratings100k.csv").setParallelism(1);
 		/*DataStream<Ysb.MovieRating> file = text
 				.map((line) -> {
@@ -89,15 +91,11 @@ public class StreamingJob {
 
 
 
-		DataStream<Tuple6<Long,Long, Integer,Long, Long,Long>>  county = file.assignTimestampsAndWatermarks(new BidEventTimestampExtractor()).
-				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId()).timeWindow(Time.milliseconds(3000),Time.milliseconds(1000))
+		/*DataStream<Tuple6<Long,Long, Integer,Long, Long,Long>>  county = file.assignTimestampsAndWatermarks(new BidEventTimestampExtractor()).
+				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId()).timeWindow(Time.milliseconds(2000),Time.milliseconds(1000))
 				.process(new HotBids()).setParallelism(1);
 
 		DataStream<Tuple6<Long ,Long, Integer,Long, Long,Long>>  ty = county.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(1000))).maxBy(3);
-
-
-		//DataStream<Tuple6<Long ,Long, Integer,Long, Long,Long>>  ty = county.keyBy(t->t.f0).maxBy(3);
-	//	ty.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/ty.csv").setParallelism(1);
 
 
 		DataStream<Tuple7<Long ,Long, Integer,Long, Long,Long,Long>> hotbid = ty.map(new MapFunction<Tuple6<Long ,Long, Integer,Long, Long,Long>,Tuple7<Long ,Long, Integer,Long, Long,Long, Long>>() {
@@ -111,18 +109,20 @@ public class StreamingJob {
 
 		});
 
-		hotbid.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/hotbid.csv").setParallelism(1);
+		hotbid.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/hotbidTest.csv").setParallelism(1);*/
 
 
 
 
 //HighestBid
-	/*	DataStream<Tuple4<Long, Double, Long, Long>>  county = file.
-				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId()).window(TumblingProcessingTimeWindows.of(Time.milliseconds(1000))).
+		DataStream<Tuple4<Long, Double, Long, Long>>  county = file.
+				keyBy((Ysb.BidEvent ev) -> ev.getAuctionId()).window(TumblingProcessingTimeWindows.of(Time.milliseconds(2000))).
 						process(new HighestBids()).setParallelism(1);
 
-		DataStream<Tuple4<Long, Double, Long, Long>>  hourlyMax = county.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(1000))).
+		DataStream<Tuple4<Long, Double, Long, Long>>  hourlyMax = county.windowAll(TumblingProcessingTimeWindows.of(Time.milliseconds(2000))).
 				maxBy(1);
+
+
 
 		DataStream<Tuple5<Long, Double, Long, Long, Long>> Double = hourlyMax.map(new MapFunction<Tuple4<Long, Double, Long, Long>,Tuple5<Long, Double, Long, Long, Long>>() {
 
@@ -135,7 +135,7 @@ public class StreamingJob {
 
 		});
 
-		Double.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/highestbid.csv").setParallelism(1);*/
+		Double.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/highestbidTest.csv").setParallelism(1);
 
 
 //Currency Conversion
@@ -154,8 +154,8 @@ public class StreamingJob {
 		});
 
 
-		conversion.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/ccurrencyconversion.csv").setParallelism(1);*/
-
+		conversion.writeAsCsv("/home/nabil/eclipse-workspace/MovieRatingFlink/src/main/resources/latency/ccurrencyconversionTestBig.csv").setParallelism(1);
+*/
 
 
 
